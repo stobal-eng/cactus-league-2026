@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cactus League Game Plan</title>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --sand: #F5E6C8;
+    --sand-light: #FBF3E4;
+    --terracotta: #C2552A;
+    --cactus: #4A7C59;
+    --night: #1A1A2E;
+    --night-mid: #2D2D44;
+    --night-card: #232338;
+    --sky: #E8C47C;
+    --dust: #D4A76A;
+    --white: #FEFEFE;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--night); font-family: 'DM Sans', sans-serif; color: var(--sand-light); min-height: 100vh; overflow-x: hidden; }
+
+  .header { text-align: center; padding: 40px 20px 20px; position: relative; }
+  .header::after { content: ''; position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); width: 120px; height: 2px; background: linear-gradient(90deg, transparent, var(--terracotta), transparent); }
+  .header h1 { font-family: 'Dela Gothic One', cursive; font-size: clamp(28px, 5vw, 48px); color: var(--sand); letter-spacing: 1px; line-height: 1.1; text-transform: uppercase; }
+  .header h1 span { display: block; font-size: 0.45em; color: var(--terracotta); letter-spacing: 6px; margin-bottom: 6px; font-family: 'DM Sans', sans-serif; font-weight: 600; }
+  .header .dates { margin-top: 12px; font-size: 14px; color: var(--dust); letter-spacing: 3px; text-transform: uppercase; }
+
+  /* === MAP === */
+  .map-wrap { position: relative; width: 100%; max-width: 900px; margin: 30px auto 0; padding: 0 16px; }
+  #map {
+    width: 100%; height: 500px;
+    border-radius: 16px; border: 1px solid rgba(245,230,200,0.12);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    z-index: 1;
+  }
+  .leaflet-tile-pane { filter: saturate(0.25) brightness(0.32) contrast(1.15) sepia(0.45) hue-rotate(5deg); }
+  .leaflet-control-zoom { border: none !important; }
+  .leaflet-control-zoom a {
+    background: rgba(35,35,56,0.92) !important; color: var(--sand) !important;
+    border: 1px solid rgba(245,230,200,0.12) !important;
+    width: 32px !important; height: 32px !important; line-height: 30px !important;
+    font-size: 16px !important;
+    backdrop-filter: blur(8px);
+  }
+  .leaflet-control-zoom a:hover { background: rgba(45,45,68,0.95) !important; color: var(--sand-light) !important; }
+  .leaflet-control-attribution { display: none !important; }
+
+  /* Custom stadium markers */
+  .stadium-marker {
+    display: flex; flex-direction: column; align-items: center;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.55));
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  .stadium-marker:hover { transform: scale(1.05); }
+  .pin-shape {
+    width: 34px; height: 44px; position: relative;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 5px;
+  }
+  .pin-shape svg { width: 34px; height: 44px; position: absolute; top: 0; left: 0; }
+  .pin-num {
+    position: relative; z-index: 2;
+    font-family: 'DM Sans', sans-serif; font-weight: 800; font-size: 12px;
+    color: var(--night); line-height: 1; margin-top: 1px;
+  }
+  .pin-info {
+    margin-top: -3px;
+    background: rgba(26,26,46,0.93);
+    border: 1px solid rgba(245,230,200,0.14);
+    border-radius: 7px; padding: 5px 9px;
+    white-space: nowrap; text-align: center;
+    backdrop-filter: blur(10px);
+  }
+  .pin-info .pi-name {
+    font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 11px;
+    color: var(--sand); display: block; margin-bottom: 2px;
+  }
+  .pin-info .pi-teams { font-size: 9.5px; color: var(--dust); display: block; margin-bottom: 1px; }
+  .pin-info .pi-time { font-size: 9px; color: rgba(245,230,200,0.45); display: block; }
+  .pin-info .badge {
+    display: inline-block; font-size: 7.5px; font-weight: 700;
+    letter-spacing: 0.8px; text-transform: uppercase;
+    padding: 1.5px 5px; border-radius: 3px; margin-right: 3px;
+    vertical-align: middle;
+  }
+  .badge-fri { background: rgba(194,85,42,0.35); color: #E8916A; }
+  .badge-sat { background: rgba(74,124,89,0.35); color: #8BC4A0; }
+  .badge-sun { background: rgba(232,196,124,0.35); color: #E8C47C; }
+
+  /* Home marker */
+  .home-marker {
+    display: flex; flex-direction: column; align-items: center;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.5));
+  }
+  .home-dot {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, #d46a3a, var(--terracotta));
+    display: flex; align-items: center; justify-content: center;
+    border: 2.5px solid var(--sand);
+    animation: homePulse 2.5s ease-in-out infinite;
+  }
+  .home-dot svg { width: 14px; height: 14px; }
+  @keyframes homePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194,85,42,0.4); }
+    50% { box-shadow: 0 0 0 12px rgba(194,85,42,0); }
+  }
+  .home-info {
+    margin-top: 4px; background: rgba(26,26,46,0.93);
+    border: 1px solid rgba(245,230,200,0.14);
+    border-radius: 7px; padding: 4px 9px;
+    white-space: nowrap; text-align: center;
+    backdrop-filter: blur(10px);
+  }
+  .home-info .hi-name { font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 11px; color: var(--terracotta); }
+  .home-info .hi-sub { font-size: 9px; color: rgba(245,230,200,0.4); display: block; }
+
+  /* Popup */
+  .leaflet-popup-content-wrapper {
+    background: rgba(35,35,56,0.96) !important;
+    border: 1px solid rgba(245,230,200,0.12) !important;
+    border-radius: 10px !important;
+    color: var(--sand-light) !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;
+    backdrop-filter: blur(12px);
+  }
+  .leaflet-popup-tip { background: rgba(35,35,56,0.96) !important; }
+  .leaflet-popup-content { margin: 10px 14px !important; font-family: 'DM Sans', sans-serif !important; font-size: 12px !important; line-height: 1.55 !important; }
+  .leaflet-popup-content .ptitle { font-weight: 700; font-size: 14px; color: var(--sand); margin-bottom: 3px; }
+  .leaflet-popup-content .pteams { color: var(--dust); font-size: 12px; }
+  .leaflet-popup-content .ptime { color: rgba(245,230,200,0.5); font-size: 11px; margin-bottom: 6px; display: block; }
+  .leaflet-popup-content .paddr { font-size: 11px; color: rgba(245,230,200,0.4); border-top: 1px solid rgba(245,230,200,0.08); padding-top: 6px; margin-top: 4px; }
+  .leaflet-popup-close-button { color: var(--dust) !important; font-size: 20px !important; }
+
+  /* === LEGEND === */
+  .map-legend {
+    display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
+    margin-top: 14px; padding: 0 16px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dust); letter-spacing: 0.3px; }
+  .legend-swatch { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-swatch.fri { background: var(--terracotta); }
+  .legend-swatch.sat { background: var(--cactus); }
+  .legend-swatch.sun { background: var(--sky); }
+  .legend-swatch.home { background: var(--terracotta); border: 2px solid var(--sand); }
+
+  /* === CARDS === */
+  .cards-section { max-width: 900px; margin: 30px auto 40px; padding: 0 16px; }
+  .day-group { margin-bottom: 24px; }
+  .day-header { display: flex; align-items: center; gap: 8px; padding: 0 4px 10px; font-size: 13px; font-weight: 600; color: var(--sand); letter-spacing: 0.5px; border-bottom: 1px solid rgba(245,230,200,0.06); margin-bottom: 12px; }
+  .day-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .day-dot.fri { background: var(--terracotta); }
+  .day-dot.sat { background: var(--cactus); }
+  .day-dot.sun { background: var(--sky); }
+  .game-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+
+  .game-card {
+    background: var(--night-card); border: 1px solid rgba(245,230,200,0.06);
+    border-radius: 12px; overflow: hidden; cursor: pointer;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .game-card:hover { border-color: rgba(245,230,200,0.12); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  .game-card.open { border-color: rgba(194,85,42,0.3); }
+  .game-card-header { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; }
+
+  .game-time-block { flex-shrink: 0; width: 52px; text-align: center; padding: 6px 0; border-radius: 8px; }
+  .game-time-block.fri { background: rgba(194,85,42,0.15); }
+  .game-time-block.sat { background: rgba(74,124,89,0.15); }
+  .game-time-block.sun { background: rgba(232,196,124,0.15); }
+  .game-time-block .time { font-family: 'Dela Gothic One', cursive; font-size: 14px; color: var(--sand); }
+  .game-time-block .ampm { font-size: 9px; color: var(--dust); letter-spacing: 1px; text-transform: uppercase; }
+  .game-info { flex: 1; min-width: 0; }
+  .game-info h3 { font-size: 14px; font-weight: 600; color: var(--sand-light); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .game-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; flex-shrink: 0;
+    background: rgba(245,230,200,0.08); border-radius: 50%;
+    position: relative;
+  }
+  .game-num svg { width: 18px; height: 18px; }
+  .game-num .num-text {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 800; color: var(--night);
+    font-family: 'DM Sans', sans-serif; line-height: 1; padding-top: 1px;
+  }
+  .game-info .venue { font-size: 12px; color: var(--dust); margin-bottom: 4px; }
+  .game-info .venue a { color: var(--dust); text-decoration: none; border-bottom: 1px dashed rgba(212,167,106,0.4); transition: color 0.2s, border-color 0.2s; }
+  .game-info .venue a:hover { color: var(--sand); border-color: var(--sand); }
+  .game-info .seats { font-size: 11px; color: rgba(245,230,200,0.45); font-style: italic; }
+
+  .expand-arrow { align-self: center; flex-shrink: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; transition: transform 0.35s ease; border-radius: 50%; background: rgba(245,230,200,0.05); }
+  .expand-arrow svg { width: 12px; height: 12px; stroke: var(--dust); stroke-width: 2.5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .game-card.open .expand-arrow { transform: rotate(180deg); background: rgba(245,230,200,0.1); }
+
+  .game-card-details { max-height: 0; overflow: hidden; transition: max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1); }
+  .game-card.open .game-card-details { max-height: 600px; }
+  .details-inner { padding: 0 16px 16px; border-top: 1px solid rgba(245,230,200,0.06); padding-top: 14px; }
+  .detail-row { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .detail-row:last-child { margin-bottom: 0; }
+  .detail-icon { flex-shrink: 0; width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 15px; background: rgba(245,230,200,0.05); margin-top: 1px; }
+  .detail-content { flex: 1; }
+  .detail-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--dust); margin-bottom: 3px; }
+  .detail-value { font-size: 12px; color: rgba(245,230,200,0.75); line-height: 1.55; }
+  .detail-value strong { color: var(--sand); font-weight: 600; }
+  .tag { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 1.2px; padding: 2px 7px; border-radius: 3px; text-transform: uppercase; vertical-align: middle; margin-right: 4px; margin-bottom: 4px; }
+  .tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+  .tag-free { background: rgba(74,124,89,0.25); color: #8BC4A0; }
+  .tag-cash { background: rgba(232,196,124,0.2); color: var(--sky); }
+  .tag-card { background: rgba(194,85,42,0.2); color: #E8916A; }
+  .tag-shade { background: rgba(74,124,89,0.2); color: #8BC4A0; }
+  .tag-sun { background: rgba(232,196,124,0.25); color: #E8C47C; }
+  .tag-sunset { background: rgba(194,120,80,0.2); color: #E0A882; }
+  .tag-weather { background: rgba(100,160,220,0.15); color: #8CBDE8; }
+  .tap-hint { text-align: center; font-size: 11px; color: rgba(245,230,200,0.2); margin-top: 10px; letter-spacing: 0.5px; }
+  .game-info .venue a { pointer-events: auto; }
+
+  @media (max-width: 600px) {
+    #map { height: 400px; }
+    .game-cards { grid-template-columns: 1fr; }
+    .map-legend { gap: 10px; }
+    .pin-info .pi-name { font-size: 10px; }
+    .pin-info .pi-teams, .pin-info .pi-time { font-size: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>Spring Training 2026</span>Cactus League<br>Game Plan</h1>
+  <div class="dates">March 6 – 8 &nbsp;·&nbsp; Scottsdale, AZ</div>
+</div>
+
+<div class="map-wrap">
+  <div id="map"></div>
+  <div class="map-legend">
+    <div class="legend-item"><div class="legend-swatch fri"></div> Friday</div>
+    <div class="legend-item"><div class="legend-swatch sat"></div> Saturday</div>
+    <div class="legend-item"><div class="legend-swatch sun"></div> Sunday</div>
+    <div class="legend-item"><div class="legend-swatch home"></div> AirBnB</div>
+  </div>
+</div>
+
+<div class="cards-section">
+  <div class="day-group">
+    <div class="day-header"><span class="day-dot fri"></span> Friday, March 6</div>
+    <div class="game-cards">
+      <div class="game-card" onclick="if(event.target.tagName!=='A')this.classList.toggle('open')">
+        <div class="game-card-header">
+          <div class="game-time-block fri"><div class="time">1:05</div><div class="ampm">PM</div></div>
+          <div class="game-info"><h3><span class="game-num"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="var(--sand)" stroke="var(--dust)" stroke-width="0.5"/><path d="M5 7 Q7 4 10 6 Q13 8 15 5" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/><path d="M5 14 Q7 11 10 13 Q13 15 15 12" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/></svg><span class="num-text">1</span></span> Reds @ Giants</h3><div class="venue"><a href="https://maps.apple.com/?daddr=7408+E+Osborn+Rd,+Scottsdale,+AZ+85251&dirflg=d" target="_blank">Scottsdale Stadium</a></div><div class="seats">Sec 306 Row 5 Seats 3-5 · Row 6 Seats 3-4</div></div>
+          <div class="expand-arrow"><svg viewBox="0 0 14 14"><polyline points="2,5 7,10 12,5"/></svg></div>
+        </div>
+        <div class="game-card-details"><div class="details-inner">
+          <div class="detail-row"><div class="detail-icon">🅿️</div><div class="detail-content"><div class="detail-label">Parking Cost</div><div class="detail-value"><div class="tag-row"><span class="tag tag-card">Cashless</span></div>No dedicated stadium lot. Nearby public lots <strong>$10 – $20</strong></div></div></div>
+          <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Where to Park</div><div class="detail-value"><strong>Scottsdale Civic Center Library garage</strong> just south of the stadium is the go-to. Additional paid lots along Drinkwater Blvd. Arrive early — Old Town lots fill fast.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">☀️</div><div class="detail-content"><div class="detail-label">Sun / Shade</div><div class="detail-value"><div class="tag-row"><span class="tag tag-shade">Full Shade</span><span class="tag tag-weather">🌤 ~83°F at first pitch</span></div>Section 306 is covered by the stadium canopy. Rows 3 and up are shaded for the entire game — you're in Row 5-6, so you'll be <strong>completely in the shade</strong> from first pitch.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">⭐</div><div class="detail-content"><div class="detail-label">Don't Miss</div><div class="detail-value">The stadium is in the heart of <strong>Old Town Scottsdale</strong> — the best walkable location of any Cactus League park. Re-entry is allowed, so you can duck out for a drink mid-game. Post-game, show your ticket stub at nearby bars for deals: <strong>$1 Modelo at The Montauk</strong>, <strong>$3 beers at El Camino</strong>, or <strong>20% off at Estelle</strong>. Pizzeria Virtù (steps away) has grab-and-go folded Neapolitan pizza.</div></div></div>
+        </div></div>
+      </div>
+      <div class="game-card" onclick="if(event.target.tagName!=='A')this.classList.toggle('open')">
+        <div class="game-card-header">
+          <div class="game-time-block fri"><div class="time">6:10</div><div class="ampm">PM</div></div>
+          <div class="game-info"><h3><span class="game-num"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="var(--sand)" stroke="var(--dust)" stroke-width="0.5"/><path d="M5 7 Q7 4 10 6 Q13 8 15 5" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/><path d="M5 14 Q7 11 10 13 Q13 15 15 12" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/></svg><span class="num-text">2</span></span> Cubs @ Padres</h3><div class="venue"><a href="https://maps.apple.com/?daddr=16101+N+83rd+Ave,+Peoria,+AZ+85382&dirflg=d" target="_blank">Peoria Sports Complex</a></div><div class="seats">Sec 115 Row M Seats 4-8</div></div>
+          <div class="expand-arrow"><svg viewBox="0 0 14 14"><polyline points="2,5 7,10 12,5"/></svg></div>
+        </div>
+        <div class="game-card-details"><div class="details-inner">
+          <div class="detail-row"><div class="detail-icon">🅿️</div><div class="detail-content"><div class="detail-label">Parking Cost</div><div class="detail-value"><div class="tag-row"><span class="tag tag-free">Free</span></div>Free parking for all spring training games</div></div></div>
+          <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Where to Park</div><div class="detail-value">On-site surface lots. Enter from <strong>Mariners Way</strong> or <strong>Stadium Way</strong> off 83rd Ave.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">☀️</div><div class="detail-content"><div class="detail-label">Sun / Shade</div><div class="detail-value"><div class="tag-row"><span class="tag tag-sunset">Night Game</span><span class="tag tag-weather">🌙 ~68°F at first pitch</span></div>6:10 PM start — the sun will be low and setting by first pitch in early March. Sec 115 is lower-level (no built-in shade cover), but it won't matter. Temps drop fast after sunset — <strong>bring a light layer</strong>.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">⭐</div><div class="detail-content"><div class="detail-label">Don't Miss</div><div class="detail-value">Known for having the <strong>best variety of food</strong> among the smaller parks — gyros, noodle bowls, churros, and great craft beer. Hit <strong>Autograph Alley</strong> on the right field concourse early to snag player signatures. Tailgating is allowed in the parking lot before games.</div></div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="day-group">
+    <div class="day-header"><span class="day-dot sat"></span> Saturday, March 7</div>
+    <div class="game-cards">
+      <div class="game-card" onclick="if(event.target.tagName!=='A')this.classList.toggle('open')">
+        <div class="game-card-header">
+          <div class="game-time-block sat"><div class="time">1:05</div><div class="ampm">PM</div></div>
+          <div class="game-info"><h3><span class="game-num"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="var(--sand)" stroke="var(--dust)" stroke-width="0.5"/><path d="M5 7 Q7 4 10 6 Q13 8 15 5" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/><path d="M5 14 Q7 11 10 13 Q13 15 15 12" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/></svg><span class="num-text">3</span></span> A's @ Cubs</h3><div class="venue"><a href="https://maps.apple.com/?daddr=2330+W+Rio+Salado+Pkwy,+Mesa,+AZ+85201&dirflg=d" target="_blank">Sloan Park · Mesa</a></div><div class="seats">Sec 101 Row 16 Seats 1-5</div></div>
+          <div class="expand-arrow"><svg viewBox="0 0 14 14"><polyline points="2,5 7,10 12,5"/></svg></div>
+        </div>
+        <div class="game-card-details"><div class="details-inner">
+          <div class="detail-row"><div class="detail-icon">🅿️</div><div class="detail-content"><div class="detail-label">Parking Cost</div><div class="detail-value"><div class="tag-row"><span class="tag tag-card">Cashless</span></div><strong>$10</strong> reserved &nbsp;·&nbsp; <strong>$5</strong> general</div></div></div>
+          <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Where to Park</div><div class="detail-value">On-site lots east of the ballpark off Rio Salado Pkwy. First-come, first-served. Lots open 4 hrs before game. Credit card only — no cash.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">☀️</div><div class="detail-content"><div class="detail-label">Sun / Shade</div><div class="detail-value"><div class="tag-row"><span class="tag tag-shade">Mostly Shade</span><span class="tag tag-weather">🌤 ~84°F at first pitch</span></div>Almost all grandstand seats at Sloan Park are shaded. Sec 101 is on the third-base side. At Row 16, you should be <strong>under shade for most of the game</strong> — rows 8+ on the third-base side get shade shortly after the 1:05 start.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">⭐</div><div class="detail-content"><div class="detail-label">Don't Miss</div><div class="detail-value">Dubbed <strong>"Wrigleyville West"</strong> — the whole park is a mini Wrigley Field replica with matching outfield curves, an analog clock, and ivy-covered walls. Get a photo at the <strong>replica Wrigley marquee</strong> (they'll put your name on it for free). Best food in the Cactus League: <strong>Vienna Beef Chicago dogs</strong>, Giordano's stuffed pizza, and rotating food trucks in the right field pavilion. Cubs practice fields are open to the public pre-game.</div></div></div>
+        </div></div>
+      </div>
+      <div class="game-card" onclick="if(event.target.tagName!=='A')this.classList.toggle('open')">
+        <div class="game-card-header">
+          <div class="game-time-block sat"><div class="time">6:05</div><div class="ampm">PM</div></div>
+          <div class="game-info"><h3><span class="game-num"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="var(--sand)" stroke="var(--dust)" stroke-width="0.5"/><path d="M5 7 Q7 4 10 6 Q13 8 15 5" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/><path d="M5 14 Q7 11 10 13 Q13 15 15 12" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/></svg><span class="num-text">4</span></span> Rockies @ Dodgers</h3><div class="venue"><a href="https://maps.apple.com/?daddr=10710+W+Camelback+Rd,+Phoenix,+AZ+85037&dirflg=d" target="_blank">Camelback Ranch · Glendale</a></div><div class="seats">Sec 28 Row 6 Seats 5-6 · Row 7 Seats 4-6</div></div>
+          <div class="expand-arrow"><svg viewBox="0 0 14 14"><polyline points="2,5 7,10 12,5"/></svg></div>
+        </div>
+        <div class="game-card-details"><div class="details-inner">
+          <div class="detail-row"><div class="detail-icon">🅿️</div><div class="detail-content"><div class="detail-label">Parking Cost</div><div class="detail-value"><div class="tag-row"><span class="tag tag-free">Free</span></div>Free parking for all spring training games</div></div></div>
+          <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Where to Park</div><div class="detail-value">Large on-site lots off <strong>Camelback Rd &amp; 111th Ave</strong>. You park on the far side and walk through the practice fields to the stadium. No neighborhood parking (tow enforced).</div></div></div>
+          <div class="detail-row"><div class="detail-icon">☀️</div><div class="detail-content"><div class="detail-label">Sun / Shade</div><div class="detail-value"><div class="tag-row"><span class="tag tag-sunset">Night Game</span><span class="tag tag-weather">🌙 ~69°F at first pitch</span></div>6:05 PM start — sun will be setting behind the third-base grandstand. Sec 28 is the Dodgers dugout side (third-base), which normally gets heavy sun at day games, but you'll dodge it with this evening start. <strong>Bring a hoodie</strong> — desert temps can swing 20°+ after sunset.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">⭐</div><div class="detail-content"><div class="detail-label">Don't Miss</div><div class="detail-value">The <strong>walk from the parking lot through the practice fields</strong> is part of the experience — you'll pass Dodgers and White Sox players warming up on 12 practice diamonds connected by paths and a scenic lake. Grab a <strong>Dodger Dog</strong> or a <strong>Chicago Dog</strong> (both available at every game). The 141-acre complex is one of the most beautiful in spring training. The <strong>Westgate Entertainment District</strong> is a short drive north for post-game food and drinks.</div></div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="day-group">
+    <div class="day-header"><span class="day-dot sun"></span> Sunday, March 8</div>
+    <div class="game-cards">
+      <div class="game-card" onclick="if(event.target.tagName!=='A')this.classList.toggle('open')">
+        <div class="game-card-header">
+          <div class="game-time-block sun"><div class="time">1:05</div><div class="ampm">PM</div></div>
+          <div class="game-info"><h3><span class="game-num"><svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="var(--sand)" stroke="var(--dust)" stroke-width="0.5"/><path d="M5 7 Q7 4 10 6 Q13 8 15 5" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/><path d="M5 14 Q7 11 10 13 Q13 15 15 12" fill="none" stroke="var(--terracotta)" stroke-width="0.8" opacity="0.5"/></svg><span class="num-text">5</span></span> Dodgers @ A's</h3><div class="venue"><a href="https://maps.apple.com/?daddr=1235+N+Center+St,+Mesa,+AZ+85201&dirflg=d" target="_blank">Hohokam Stadium · Mesa</a></div><div class="seats">Sec 101 Row 8 Seats 3-7</div></div>
+          <div class="expand-arrow"><svg viewBox="0 0 14 14"><polyline points="2,5 7,10 12,5"/></svg></div>
+        </div>
+        <div class="game-card-details"><div class="details-inner">
+          <div class="detail-row"><div class="detail-icon">🅿️</div><div class="detail-content"><div class="detail-label">Parking Cost</div><div class="detail-value"><div class="tag-row"><span class="tag tag-cash">Cash Only</span></div><strong>$5</strong> per vehicle</div></div></div>
+          <div class="detail-row"><div class="detail-icon">📍</div><div class="detail-content"><div class="detail-label">Where to Park</div><div class="detail-value">On-site lot on the <strong>grass fields north &amp; south of the stadium</strong> off Center St. <strong>Bring cash</strong> — no cards accepted for parking.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">☀️</div><div class="detail-content"><div class="detail-label">Sun / Shade</div><div class="detail-value"><div class="tag-row"><span class="tag tag-sun">Partial Sun</span><span class="tag tag-weather">🌤 ~73°F at first pitch</span></div>Sec 101 is on the lower level near the infield. The grandstand canopy mostly covers the 200-level terrace seats. At Row 8 you'll likely have <strong>sun early, with shade arriving by mid-game</strong> as the shadows extend. Bring sunscreen, sunglasses, and a hat for the first few innings.</div></div></div>
+          <div class="detail-row"><div class="detail-icon">⭐</div><div class="detail-content"><div class="detail-label">Don't Miss</div><div class="detail-value">A small, intimate park with a <strong>classic minor-league feel</strong> — you're close enough to chat with players. Try the <strong>Mustache Pretzels</strong> food truck on the main concourse and <strong>Ike's Love &amp; Sandwiches</strong> (SF-based, some of the best food in spring training). The <strong>Stomper's Kid Zone</strong> has t-ball and skeeball for kids 12 and under. Hohokam has the <strong>largest LED scoreboard in the Cactus League</strong>. The right field deck has open drink-rail seating with a great view.</div></div></div>
+        </div></div>
+      </div>
+    </div>
+  </div>
+  <div class="tap-hint">↕ Tap a game card to expand details</div>
+</div>
+
+<script>
+const map = L.map('map', {
+  center: [33.53, -111.98],
+  zoom: 11,
+  zoomControl: true,
+  scrollWheelZoom: true,
+  attributionControl: false
+});
+
+// CartoDB light tiles, darkened via CSS filter
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 17, minZoom: 9
+}).addTo(map);
+
+// Stadium data
+const stadiums = [
+  { num: 1, name: 'Scottsdale Stadium', teams: 'Reds @ Giants', time: '1:05 PM', day: 'fri', dayLabel: 'Fri Mar 6', lat: 33.4567, lng: -111.9283, color: '#C2552A', addr: '7408 E Osborn Rd, Scottsdale' },
+  { num: 2, name: 'Peoria Sports Complex', teams: 'Cubs @ Padres', time: '6:10 PM', day: 'fri', dayLabel: 'Fri Mar 6', lat: 33.6383, lng: -112.2373, color: '#C2552A', addr: '16101 N 83rd Ave, Peoria' },
+  { num: 3, name: 'Sloan Park', teams: "A's @ Cubs", time: '1:05 PM', day: 'sat', dayLabel: 'Sat Mar 7', lat: 33.4380, lng: -111.8830, color: '#4A7C59', addr: '2330 W Rio Salado Pkwy, Mesa' },
+  { num: 4, name: 'Camelback Ranch', teams: 'Rockies @ Dodgers', time: '6:05 PM', day: 'sat', dayLabel: 'Sat Mar 7', lat: 33.5063, lng: -112.2316, color: '#4A7C59', addr: '10710 W Camelback Rd, Glendale' },
+  { num: 5, name: 'Hohokam Stadium', teams: "Dodgers @ A's", time: '1:05 PM', day: 'sun', dayLabel: 'Sun Mar 8', lat: 33.4354, lng: -111.8332, color: '#E8C47C', addr: '1235 N Center St, Mesa' }
+];
+
+const badgeClass = { fri: 'badge-fri', sat: 'badge-sat', sun: 'badge-sun' };
+
+function pinSvg(color) {
+  return `<svg viewBox="0 0 34 44" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17 42 C17 42 3 27 3 16 A14 14 0 1 1 31 16 C31 27 17 42 17 42Z" fill="${color}" stroke="rgba(245,230,200,0.6)" stroke-width="1"/>
+    <circle cx="17" cy="16" r="9.5" fill="#F5E6C8" stroke="#D4A76A" stroke-width="0.5"/>
+    <path d="M10.5 13 Q13.5 9.5 17 12 Q20.5 14.5 23.5 11" fill="none" stroke="#C2552A" stroke-width="0.7" opacity="0.4"/>
+    <path d="M10.5 20 Q13.5 16.5 17 19 Q20.5 21.5 23.5 18" fill="none" stroke="#C2552A" stroke-width="0.7" opacity="0.4"/>
+  </svg>`;
+}
+
+stadiums.forEach(s => {
+  const html = `<div class="stadium-marker">
+    <div class="pin-shape">${pinSvg(s.color)}<span class="pin-num">${s.num}</span></div>
+    <div class="pin-info">
+      <span class="pi-name"><span class="badge ${badgeClass[s.day]}">${s.dayLabel}</span> ${s.name}</span>
+      <span class="pi-teams">${s.teams}</span>
+      <span class="pi-time">⚾ ${s.time}</span>
+    </div>
+  </div>`;
+
+  const icon = L.divIcon({ html, className: '', iconSize: [200, 95], iconAnchor: [17, 44], popupAnchor: [83, -44] });
+
+  L.marker([s.lat, s.lng], { icon }).addTo(map)
+    .bindPopup(`<div class="ptitle">${s.name}</div><div class="pteams">${s.teams}</div><span class="ptime">${s.dayLabel} · ${s.time}</span><div class="paddr">${s.addr}</div>`);
+});
+
+// Home marker
+const homeHtml = `<div class="home-marker">
+  <div class="home-dot"><svg viewBox="0 0 24 24" fill="none" stroke="#FBF3E4" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+  <div class="home-info"><span class="hi-name">AirBnB</span><span class="hi-sub">Lone Mountain & Scottsdale Rd</span></div>
+</div>`;
+
+L.marker([33.673, -111.923], {
+  icon: L.divIcon({ html: homeHtml, className: '', iconSize: [170, 65], iconAnchor: [15, 15] })
+}).addTo(map);
+
+// Fit bounds
+const lats = stadiums.map(s => s.lat).concat(33.673);
+const lngs = stadiums.map(s => s.lng).concat(-111.923);
+map.fitBounds([[Math.min(...lats) - 0.015, Math.min(...lngs) - 0.015], [Math.max(...lats) + 0.025, Math.max(...lngs) + 0.015]], { padding: [25, 25] });
+</script>
+
+</body>
+</html>
